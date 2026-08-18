@@ -53,3 +53,8 @@ fire_detection_yolov8m.pt
 
 # Ignore OS-specific and user-specific files
 /.vs/
+# Test input/output files
+inputvideo.mp4
+result.mp4
+output.jpg
+test_image.jpg
