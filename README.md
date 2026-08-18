@@ -1,4 +1,4 @@
-# MarkMyAd - Standalone Fire Detection
+Fire Detection and smoke detection
 
 This is a standalone, independent extraction of the Fire Detection system from the `markmyad-supervision` project.
 
