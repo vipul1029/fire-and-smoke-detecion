@@ -1,992 +1,577 @@
-# Fire and Smoke Detection System — Complete Technical Report
+# Research Article Helper Report
+# Fire and Smoke Detection with False Alarm Reduction, Fire Progression Prediction, and Automated Incident Reporting
 
-**Project:** Real-Time Fire and Smoke Detection using Deep Learning  
-**Type:** Independent Research Project  
-**Author:** vipul1029 (tovipul.kr@gmail.com)  
-**Report Date:** 2026-09-11  
-**Repository Branch:** main
+> **Status:** Training in progress. Sections marked `[ADD AFTER TRAINING]` must be filled once YOLOv8m and Temporal Transformer training completes.
 
 ---
 
-## Table of Contents
+## SUGGESTED PAPER TITLE OPTIONS
 
-1. [Project Overview](#1-project-overview)
-2. [Repository Structure](#2-repository-structure)
-3. [Technology Stack and Dependencies](#3-technology-stack-and-dependencies)
-4. [Model Architecture and Weights](#4-model-architecture-and-weights)
-5. [Training Configuration (From Checkpoint)](#5-training-configuration-from-checkpoint)
-6. [Training Performance Metrics](#6-training-performance-metrics)
-7. [Source Code Deep Analysis](#7-source-code-deep-analysis)
-   - [src/\_\_init\_\_.py](#srcinitipy)
-   - [src/detector.py](#srcdetectorpy)
-   - [src/pipeline.py](#srcpipelinepy)
-   - [src/download_weights.py](#srcdownload_weightspy)
-   - [run.py](#runpy)
-8. [Data Flow and Execution Model](#8-data-flow-and-execution-model)
-9. [Detection Output and Annotation System](#9-detection-output-and-annotation-system)
-10. [Severity Scoring System](#10-severity-scoring-system)
-11. [CLI Interface](#11-cli-interface)
-12. [Library API](#12-library-api)
-13. [Model Weight Management](#13-model-weight-management)
-14. [Dataset Information](#14-dataset-information)
-15. [Configuration and Environment](#15-configuration-and-environment)
-16. [Git History and Development Timeline](#16-git-history-and-development-timeline)
-17. [File Inventory](#17-file-inventory)
-18. [Known Issues and Discrepancies](#18-known-issues-and-discrepancies)
-19. [Summary of Verified Facts](#19-summary-of-verified-facts)
+1. "Real-Time Fire and Smoke Detection with Three-Stage False Alarm Reduction and Temporal Transformer-Based Progression Prediction"
+2. "A Novel Multi-Stage Fire Detection Framework with AI-Driven Incident Report Generation"
+3. "Beyond Detection: Predicting Fire Progression Using Temporal Transformers with Automated Natural Language Incident Reporting"
+
+**Recommended:** Option 1 — most descriptive, covers all three novelties clearly.
 
 ---
 
-## 1. Project Overview
+## ABSTRACT (DRAFT)
 
-This is an AI system that detects fire and smoke in real time using a YOLOv8 deep learning model packaged in a clean Python application. It exposes three operating modes:
+Fire detection systems based on deep learning have demonstrated high accuracy in identifying fire and smoke in visual data. However, existing approaches suffer from high false alarm rates caused by visually similar stimuli such as sunsets, reflections, and illumination changes, and they provide no information about how a detected fire will evolve over time. This paper presents a comprehensive real-time fire and smoke detection framework that addresses both limitations. The proposed system combines a YOLOv8m object detector with a novel Three-Stage False Alarm Reduction Framework consisting of HSV color space verification, temporal persistence filtering, and Laplacian texture chaos analysis. A Temporal Transformer model is trained on sequential fire detection features to predict fire progression — classifying future behavior as stable, growing, or critical — along with quantitative fire area estimates at 5-second and 10-second horizons. Finally, an automated Natural Language Generation module powered by a locally deployed large language model converts structured detection metadata into human-readable incident descriptions and safety recommendations in real time. Experiments on the D-Fire dataset demonstrate [ADD AFTER TRAINING]. The complete system runs at [X] FPS on an NVIDIA RTX 4050 GPU, making it suitable for real-time deployment.
 
-- **Image mode** — process a single image file, save annotated result
-- **Video mode** — process a video file frame-by-frame, produce annotated output video
-- **Webcam mode** — live continuous detection from a camera device
-
-This is an independent research project focused on real-time fire and smoke detection using deep learning.
-
-The system detects two classes:
-
-| Class ID | Label |
-|----------|-------|
-| 0 | smoke |
-| 1 | fire |
+**Keywords:** Fire detection, smoke detection, YOLOv8, false alarm reduction, Temporal Transformer, fire progression prediction, natural language generation, incident reporting, real-time surveillance.
 
 ---
 
-## 2. Repository Structure
+## 1. INTRODUCTION
+
+### 1.1 Problem Statement
+
+Fire is one of the most destructive natural and man-made disasters, causing significant loss of life, property, and environment annually. Early and accurate detection is critical to minimizing damage. Traditional fire detection systems rely on heat or gas sensors, which require physical proximity to the fire source. Camera-based fire detection using deep learning offers a non-contact, wide-area monitoring solution.
+
+However, current camera-based detection systems face two key limitations:
+
+1. **High false alarm rate** — Objects with similar visual characteristics to fire and smoke (sunsets, red indicator lights, vehicle tail lights, construction dust) trigger false detections, reducing system reliability and operator trust.
+
+2. **Detection without prediction** — Current systems only answer "Is fire present?" not "How will the fire develop?" This limits the time available for evacuation and emergency response.
+
+### 1.2 Contributions
+
+This paper makes the following contributions:
+
+1. **Three-Stage False Alarm Reduction Framework** — A novel post-detection verification pipeline combining HSV color space analysis, temporal persistence filtering, and Laplacian texture chaos analysis, operating sequentially to reject false positives before alert generation.
+
+2. **Temporal Transformer for Fire Progression Prediction** — A transformer-based sequence model that processes 15 consecutive frames of structured detection features to predict whether fire will remain stable, grow, or become critical within the next 5–10 seconds, along with quantitative fire area forecasts.
+
+3. **Automated LLM-Powered Incident Reporting** — A natural language generation module that uses a locally deployed large language model (Ollama/Phi-3 Mini) to convert structured detection data into human-readable incident descriptions and safety recommendations, with rule-based fallback ensuring reliability under all conditions.
+
+4. **End-to-End Real-Time Pipeline** — All three components are integrated into a single pipeline that processes live video frames and produces annotated output with detection overlays, prediction labels, risk scores, and incident reports simultaneously.
+
+---
+
+## 2. RELATED WORK
+
+### 2.1 Image-Based Fire Detection
+
+Early deep learning approaches for fire detection adapted CNNs for binary classification (fire vs. no-fire). Sharma et al. (2017) demonstrated that pre-trained VGG-16 features could effectively distinguish fire from non-fire images. Subsequently, YOLO-based detectors were applied for localizing fire regions. Cao et al. (2019) proposed a modified YOLOv3 for fire and smoke detection. Muhammad et al. (2018) introduced an efficient deep learning approach for early fire detection in surveillance systems.
+
+The YOLOv8 family, introduced by Ultralytics (2023), achieves state-of-the-art detection accuracy with improved anchor-free architecture and C2f modules, making it particularly suitable for real-time applications.
+
+**Gap:** Most existing detection approaches do not perform post-detection verification, leading to false alarms from visually similar stimuli.
+
+### 2.2 False Alarm Reduction
+
+Several works have addressed false alarm reduction in fire detection. Chenebert et al. (2011) used color and texture features for fire pixel classification. Ko et al. (2012) proposed motion analysis to distinguish real fire from fire-like objects. Celik & Demirel (2009) developed HSV-based fire color models. However, these methods operate at the pixel level and are not designed to work as post-hoc verification stages on top of deep learning detectors.
+
+**Gap:** No existing work combines HSV verification, temporal persistence, and texture chaos analysis as a three-stage post-detection filter on top of a YOLOv8 detector.
+
+### 2.3 Temporal Modeling for Fire
+
+A few works have explored temporal information for fire detection. Foggia et al. (2015) used background subtraction and temporal features. Steffens et al. (2017) analyzed temporal patterns in fire pixel sequences. However, these approaches focus on improving detection rather than predicting future fire behavior.
+
+Transformer architectures (Vaswani et al., 2017) have been applied to video understanding tasks. Vision Transformers and Video Swin Transformers have shown strong performance on action recognition and temporal modeling. However, applying lightweight transformers to structured fire feature sequences for progression prediction has not been explored.
+
+**Gap:** No existing work predicts fire progression (stable/growing/critical) using a Temporal Transformer on structured detection feature sequences.
+
+### 2.4 Natural Language Generation in Safety Systems
+
+NLG has been applied in weather forecasting (Reiter et al., 2005), medical reporting, and traffic incident reporting. The emergence of lightweight local LLMs (Phi-3, Llama 3.2) makes real-time, offline LLM-powered reporting feasible. No existing fire detection system integrates LLM-based natural language incident report generation.
+
+**Gap:** No fire detection system generates human-readable incident reports using a local LLM in real time.
+
+### 2.5 Papers to Cite in References
+
+- Vaswani et al. (2017) — "Attention Is All You Need" — Transformer architecture
+- Redmon & Farhadi (2018) — YOLOv3 — YOLO background
+- Jocher et al. (2023) — Ultralytics YOLOv8 — base detector
+- Muhammad et al. (2018) — "Efficient Deep CNN-Based Fire Detection"
+- Celik & Demirel (2009) — "Fire detection in video sequences using a generic color model"
+- Foggia et al. (2015) — "Real-time fire detection for video-surveillance applications"
+- Microsoft (2024) — Phi-3 Technical Report — local LLM
+
+---
+
+## 3. SYSTEM ARCHITECTURE
+
+### 3.1 Overview
+
+The proposed system consists of four sequential modules:
 
 ```
-fire and smoke detection/
-├── src/                            # Python package
-│   ├── __init__.py                 # Public API surface (exports 3 names)
-│   ├── detector.py                 # YOLOv8 model loading and raw inference
-│   ├── pipeline.py                 # FPS tracking, annotation, severity scoring
-│   ├── download_weights.py         # Weight download and ensure helpers
-│   └── weights/                    # Created at runtime; stores .pt model file
-│       └── fire_detection_yolov8m.pt  (gitignored; ~200 MB)
-├── run.py                          # CLI entry point
-├── requirements.txt                # Pinned Python dependencies (5 entries)
-├── README.md                       # User documentation
-├── .gitignore                      # Excludes weights, venv, test artifacts
-├── .gitattributes                  # Line-ending and binary rules
-├── .venv/                          # Local virtual environment (gitignored)
-├── DATASET_IDENTIFICATION_REPORT.md # Deep analysis of model checkpoint metadata
-├── PRESENTATION_CONTENT_AND_SOURCES.md
-├── SECTION_3_PROJECT_METHODOLOGY.md
-├── Fire_Smoke_Detection_Research_Presentation.pptx
-├── Fire_Smoke_Detection_Research_Presentation_FINAL.pptx
-├── gen_final.py                    # Presentation generation script
-├── generate_presentation.py        # Presentation generation script
-├── test_image.jpg                  # Sample input (gitignored after latest commit)
-├── inputvideo.mp4                  # Sample input video (gitignored)
-├── output.jpg                      # Sample output image (gitignored)
-├── output.mp4                      # Sample output video (runtime-generated)
-└── result.mp4                      # Sample annotated result (gitignored)
+INPUT VIDEO FRAME
+        |
+        v
++-----------------------------+
+|   Module 1: YOLOv8m         |  <- Object detection (fire, smoke)
+|   Detector                  |
++-------------+---------------+
+              | raw detections
+              v
++-----------------------------+
+|   Module 2: Three-Stage     |  <- False alarm rejection
+|   False Alarm Reduction     |     Stage 1: HSV Color
+|                             |     Stage 2: Temporal Persistence
+|                             |     Stage 3: Texture Chaos
++-------------+---------------+
+              | verified detections
+              v
++-----------------------------+
+|   Module 3: Temporal        |  <- Fire progression prediction
+|   Transformer Predictor     |     stable / growing / critical
+|                             |     + risk score + area forecast
++-------------+---------------+
+              | prediction
+              v
++-----------------------------+
+|   Module 4: NLG Incident    |  <- Natural language report
+|   Reporter (Ollama LLM)     |     description + recommendation
++-------------+---------------+
+              |
+              v
+  ANNOTATED FRAME + REPORT
 ```
-
-The `src/weights/` directory and all `.pt` files are gitignored. The model is downloaded automatically on first run.
 
 ---
 
-## 3. Technology Stack and Dependencies
+## 4. METHODOLOGY
 
-### requirements.txt (pinned versions)
+### 4.1 Module 1 — YOLOv8m Fire and Smoke Detector
 
-| Package | Pinned Version | Role |
-|---------|---------------|------|
-| `ultralytics` | 8.2.18 | YOLOv8 inference framework |
-| `numpy` | 1.26.4 | Numerical array operations |
-| `opencv-python` | 4.9.0.80 | Image/video I/O and drawing |
-| `requests` | (latest) | HTTP download of model weights |
-| `torch` | (latest) | PyTorch deep learning backend |
-
-### Runtime Environment
-
-- **Python version required:** 3.9+
-- **OS:** Windows, macOS, or Linux (cross-platform)
-- **Hardware:** CPU (default) or CUDA-capable NVIDIA GPU
-- **Disk space:** ~200 MB for model weights
-- **Virtual environment:** `.venv/` (Python 3.10 detected in `.venv/pyvenv.cfg`)
-
-### Installed venv packages (notable)
-
-The virtual environment contains a full scientific Python stack installed by pip, including: `scipy`, `sympy`, `matplotlib`, `networkx`, `fonttools`, `tqdm`, `psutil`, `py-cpuinfo`, `pillow`, `pytz`, `tzdata`, `pyyaml`, `six`, `colorama`, `certifi`, `charset-normalizer`, `idna`, `urllib3`.
-
----
-
-## 4. Model Architecture and Weights
-
-### Critical Correction: The Weights File Is Misnamed
-
-The weights file is named `fire_detection_yolov8m.pt` (the "m" implies medium), but deep inspection of the checkpoint via `torch.load()` confirms the actual architecture is **YOLOv8n (nano)**.
-
-| Property | Value | Verified From |
-|----------|-------|---------------|
-| Weights filename | `fire_detection_yolov8m.pt` | filesystem |
-| **Actual architecture** | **YOLOv8n (NANO)** | `model.yaml['depth_multiple']=0.33`, `['width_multiple']=0.25` |
-| Total parameters | **3,011,238** (~3M) | `model.info()` |
-| Number of layers | 226 | `model.info()` |
-| Input resolution | 640 × 640 pixels | `train_args['imgsz']` |
-| Number of classes | 2 | `model.nc`, `model.yaml['nc']` |
-| Class names | `{0: 'smoke', 1: 'fire'}` | `model.names` |
-| Training run name | `yolov8n-dfire` | `train_args['name']` |
-| Ultralytics training version | 8.4.51 | `ckpt['version']` |
-| Ultralytics inference version | 8.2.18 | `requirements.txt` |
-| Training date | 2026-05-20 | `ckpt['date']` |
-| Training device | Apple Silicon (mps) | `train_args['device']` |
-
-### YOLOv8 Variant Comparison
-
-| Variant | depth_multiple | width_multiple | ~Parameters |
-|---------|---------------|---------------|-------------|
-| **n (nano) — THIS MODEL** | **0.33** | **0.25** | **~3M** |
-| s (small) | 0.33 | 0.50 | ~11M |
-| m (medium) | 0.67 | 0.75 | ~25M |
-| l (large) | 1.00 | 1.00 | ~44M |
-| x (xlarge) | 1.00 | 1.25 | ~68M |
-
-The README incorrectly states "YOLOv8 medium". The architecture is definitively YOLOv8n.
-
-### Weight Source
-
-The model weights are hosted on Hugging Face:
-
-```
-https://huggingface.co/rabahdev/fire-smoke-yolov8n/resolve/main/best.pt
-```
-
-The local path where they are saved: `src/weights/fire_detection_yolov8m.pt`
-
----
-
-## 5. Training Configuration (From Checkpoint)
-
-All values below were extracted from the embedded `train_args` inside `src/weights/fire_detection_yolov8m.pt`.
-
-### Core Training Hyperparameters
+#### Architecture
 
 | Parameter | Value |
 |-----------|-------|
-| Task | detect |
-| Mode | train |
-| Epochs | 50 |
-| Batch size | 16 |
-| Image size | 640 × 640 |
-| Optimizer | auto (Ultralytics auto-selection) |
-| Initial learning rate (lr0) | 0.01 |
-| Final LR ratio (lrf) | 0.01 |
+| Architecture | YOLOv8m |
+| depth_multiple | 0.67 |
+| width_multiple | 0.75 |
+| Total parameters | ~25.9 million |
+| Input resolution | 640 x 640 |
+| Detection classes | 2 (smoke=0, fire=1) |
+| Anchor type | Anchor-free |
+| Backbone | CSP-Darknet with C2f modules |
+| Neck | PAN-FPN |
+| Head | Decoupled detection head |
+
+#### Training Dataset — D-Fire
+
+| Split | Images |
+|-------|--------|
+| Train | [ADD AFTER TRAINING] |
+| Validation | [ADD AFTER TRAINING] |
+| Source | kaggle: sayedgamal99/smoke-fire-detection-yolo |
+
+#### Training Configuration
+
+| Hyperparameter | Value |
+|---------------|-------|
+| Epochs | 50 (early stopping patience=15) |
+| Batch size | 8 (6GB VRAM) |
+| Image size | 640 x 640 |
+| Optimizer | SGD with momentum |
+| Learning rate (lr0) | 0.01 |
 | Momentum | 0.937 |
 | Weight decay | 0.0005 |
-| Warmup epochs | 3.0 |
-| Warmup momentum | 0.8 |
-| Warmup bias LR | 0.0 |
-| Early stopping patience | 15 epochs |
-| Seed | 0 |
-| Fraction of dataset used | 1.0 (100%) |
-| Pretrained | True (transfer learning) |
-| AMP (mixed precision) | Enabled |
-| Training NMS IoU | 0.7 |
-| Inference NMS IoU | 0.45 |
-| Inference confidence threshold | 0.25 |
+| Warmup epochs | 3 |
+| Mixed precision (AMP) | Enabled |
+| Mosaic augmentation | 1.0 |
+| Pretrained | COCO |
+| Hardware | NVIDIA RTX 4050 (6GB VRAM) |
 
-### Loss Weights
+#### Detection Results — `[ADD AFTER TRAINING]`
 
-| Parameter | Value |
-|-----------|-------|
-| Box loss weight | 7.5 |
-| Classification loss weight | 0.5 |
-| DFL loss weight | 1.5 |
-
-### Data Augmentation Pipeline
-
-| Augmentation | Value |
-|--------------|-------|
-| Mosaic | 1.0 (disabled for final 10 epochs) |
-| Close mosaic (last N epochs) | 10 |
-| Auto-augment strategy | randaugment |
-| Random erasing | 0.4 |
-| HSV hue jitter | 0.015 |
-| HSV saturation jitter | 0.7 |
-| HSV value jitter | 0.4 |
-| Horizontal flip probability | 0.5 |
-| Vertical flip probability | 0.0 |
-| Translation | 0.1 |
-| Scale | 0.5 |
-| Shear | 0.0 |
-| Rotation (degrees) | 0.0 |
-| Perspective | 0.0 |
-| Mixup | 0.0 |
-| Copy-paste | 0.0 |
+| Metric | Overall | Fire | Smoke |
+|--------|---------|------|-------|
+| mAP@0.5 | [ADD] | [ADD] | [ADD] |
+| mAP@0.5:0.95 | [ADD] | [ADD] | [ADD] |
+| Precision | [ADD] | [ADD] | [ADD] |
+| Recall | [ADD] | [ADD] | [ADD] |
+| Inference speed | [ADD] ms/frame | - | - |
+| Training time | [ADD] hours | - | - |
 
 ---
 
-## 6. Training Performance Metrics
+### 4.2 Module 2 — Three-Stage False Alarm Reduction Framework
 
-Extracted from `train_metrics` inside the checkpoint.
+#### Stage 1 — HSV Color Space Verification
 
-### Final Metrics at Epoch 50
+Each detected bounding box is cropped and converted to HSV color space. A color mask is applied based on fire/smoke spectral characteristics.
 
-| Metric | Value |
-|--------|-------|
-| mAP@0.5 | **0.76498 (76.5%)** |
-| mAP@0.5:0.95 | **0.44460 (44.5%)** |
-| Precision | **0.77529 (77.5%)** |
-| Recall | **0.69452 (69.5%)** |
-| val/box_loss | 1.09252 |
-| val/cls_loss | 1.25522 |
-| val/dfl_loss | 0.99099 |
+**Fire color model:**
+```
+mask1 = H in [0, 35]   AND  S > 100  AND  V > 100   (red-orange-yellow)
+mask2 = H in [160, 180] AND  S > 100  AND  V > 100   (red wraparound)
+ratio = count(mask1 OR mask2) / total_pixels
+accept if ratio > 0.12
+```
 
-### Training Progression (Selected Epochs)
+**Smoke color model:**
+```
+mask  = S in [0, 60]  AND  V in [80, 220]   (low-saturation grey/white)
+ratio = count(mask) / total_pixels
+accept if ratio > 0.10
+```
 
-| Epoch | mAP@0.5 | mAP@0.5:0.95 | Precision | Recall |
-|-------|---------|-------------|-----------|--------|
-| 1 | 0.38729 | 0.17637 | 0.48093 | 0.42605 |
-| 5 | 0.46727 | 0.21607 | 0.50985 | 0.47480 |
-| 10 | 0.61737 | 0.32478 | 0.62633 | 0.58352 |
-| 15 | 0.66175 | 0.35837 | 0.66454 | 0.61095 |
-| 20 | 0.70351 | 0.39116 | 0.71708 | 0.63205 |
-| 25 | 0.72236 | 0.40810 | 0.73811 | 0.64288 |
-| 30 | 0.74310 | 0.42226 | 0.73695 | 0.67635 |
-| 35 | 0.74924 | 0.43126 | 0.74940 | 0.68639 |
-| 40 | 0.75766 | 0.44158 | 0.75997 | 0.68544 |
-| 45 | 0.76240 | 0.44150 | 0.76756 | 0.68674 |
-| **50** | **0.76498** | **0.44460** | **0.77529** | **0.69452** |
+Rejects: sunsets, tail lights, orange barriers.
 
-The model shows consistent monotonic improvement across all 50 epochs, with the largest gains in the first 20 epochs (mAP@0.5 going from 0.387 → 0.704) and a plateau forming after epoch 40.
+#### Stage 2 — Temporal Persistence Filter
+
+A detection at frame t is accepted only if a spatially overlapping detection (IoU > 0.10) existed in at least one of the previous W=3 frames:
+
+```
+IoU(box_t, box_{t-k}) > 0.10  for some k in {1, 2, 3}
+
+IoU = intersection_area / (area_A + area_B - intersection_area)
+```
+
+Grace period applied for first W-1 frames of a new stream.
+
+Rejects: camera flashes, single-frame sensor noise, sudden lighting spikes.
+
+#### Stage 3 — Laplacian Texture Chaos Analysis
+
+Fire and smoke have chaotic, high-frequency textures. Laplacian variance measures texture complexity:
+
+```
+L(x,y) = d2I/dx2 + d2I/dy2
+texture_score = Var(L(I))
+
+Fire threshold:  texture_score > 200.0
+Smoke threshold: texture_score > 80.0
+```
+
+Rejects: uniform red walls, indicator lights, smooth reflective surfaces.
+
+#### False Alarm Reduction Results — `[ADD AFTER TRAINING]`
+
+| Stage | Detections Rejected | False Alarm Reduction |
+|-------|--------------------|-----------------------|
+| Stage 1 (HSV) | [ADD] | [ADD]% |
+| Stage 2 (Persistence) | [ADD] | [ADD]% |
+| Stage 3 (Texture) | [ADD] | [ADD]% |
+| All Three Combined | [ADD] | [ADD]% |
+| True Positive Retention | [ADD] | [ADD]% |
 
 ---
 
-## 7. Source Code Deep Analysis
-
-### src/\_\_init\_\_.py
-
-**File:** `src/__init__.py`  
-**Lines:** 8  
-**Role:** Public API surface for the `src` package.
-
-Exports exactly three names:
-
-```python
-from .detector import FireDetector, Detection
-from .pipeline import FireAIPipeline
-
-__all__ = ["FireDetector", "Detection", "FireAIPipeline"]
-```
-
-This is the minimal, correct package init that any downstream import consumer would use.
-
----
-
-### src/detector.py
-
-**File:** `src/detector.py`  
-**Lines:** 175  
-**Role:** Owns the YOLO model lifecycle — loading, weight management, inference, and the `Detection` result dataclass.
-
-#### PyTorch Compatibility Patch (lines 15–26)
-
-The file monkey-patches `torch.load` at module import time to force `weights_only=False`:
-
-```python
-original_load = torch.load
-def patched_load(*args, **kwargs):
-    kwargs["weights_only"] = False
-    return original_load(*args, **kwargs)
-torch.load = patched_load
-```
-
-This is a backward-compatibility workaround for PyTorch 2.6+, which changed the default of `weights_only` to `True`, breaking loading of Ultralytics `.pt` files that embed non-tensor Python objects in the checkpoint. The patch ensures the model loads correctly regardless of the installed PyTorch version.
-
-#### Constants
-
-```python
-WEIGHTS_DIR = Path(__file__).parent / "weights"          # src/weights/
-FIRE_WEIGHTS = WEIGHTS_DIR / "fire_detection_yolov8m.pt" # full path to .pt file
-```
-
-#### Detection Dataclass
-
-```python
-@dataclass
-class Detection:
-    bbox: List[int]          # [x1, y1, x2, y2] in pixel coordinates
-    confidence: float        # 0.0 – 1.0
-    class_id: int = 0        # 0=smoke, 1=fire
-    label: str = "fire"
-    crop: Optional[np.ndarray] = field(default=None, repr=False)
-
-    @property
-    def width(self) -> int:   # x2 - x1
-    @property
-    def height(self) -> int:  # y2 - y1
-```
-
-`crop` is excluded from `__repr__` to avoid spamming logs with numpy array data. The `bbox` is always clamped to frame boundaries before construction (lines 144–148).
-
-#### FireDetector Class
-
-**Constructor parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `conf_threshold` | float | 0.25 | Minimum confidence to keep a detection |
-| `iou_threshold` | float | 0.45 | NMS IoU threshold |
-| `input_size` | int | 640 | YOLO input resolution (pixels) |
-| `device` | str | "cpu" | Inference device: "cpu", "cuda", "mps", etc. |
-| `weights_url` | str or None | None | Override Hugging Face download URL |
-
-**Initialization flow:**
-1. Stores all parameters.
-2. Resolves `weights_url` — falls back to `FIRE_MODEL_HF_URL` env var, then to the hardcoded Hugging Face URL.
-3. Creates `WEIGHTS_DIR` if it doesn't exist.
-4. Calls `_load_model()`.
-
-**`_load_model()` logic (lines 76–94):**
-1. If `FIRE_WEIGHTS` does not exist → calls `_download_weights()`.
-2. If `FIRE_WEIGHTS` still does not exist → sets `backend="unavailable"`, `available=False`, and returns (graceful degradation).
-3. If weights exist → `from ultralytics import YOLO; self.model = YOLO(str(FIRE_WEIGHTS))`.
-4. Reads `model.names` from the YOLO object to populate `self.class_names`.
-5. Sets `self.available = True`.
-
-**`download_from_hf()` static method (lines 103–119):**
-
-Downloads weights via streaming HTTP with a 30-second timeout. Writes in 8 KB chunks. If any exception occurs, deletes the partial file and re-raises as `RuntimeError`. This prevents corrupted partial downloads from being silently used on subsequent runs.
-
-**`detect()` method (lines 121–162):**
-
-Calls `self.model.predict()` with:
-- `stream=False` — returns all results at once
-- `verbose=False` — suppresses Ultralytics console output
-
-For each bounding box in results:
-1. Extracts `xyxy` coordinates as integers.
-2. Gets confidence and class_id.
-3. Resolves label from `self.class_names`.
-4. Clamps coordinates to `[0, frame_width]` × `[0, frame_height]`.
-5. Skips degenerate boxes where `x2 <= x1` or `y2 <= y1`.
-6. Crops the detected region from the frame.
-7. Appends a `Detection` object.
-
-Returns `List[Detection]` — empty list if model is not loaded.
-
-**`info` property (lines 164–174):**
-
-Returns a diagnostic dict with backend, model name, weights path, availability, and threshold values.
-
----
-
-### src/pipeline.py
-
-**File:** `src/pipeline.py`  
-**Lines:** 146  
-**Role:** Orchestrates detection, tracks per-frame performance metrics, renders visual annotations, and computes severity scores.
-
-#### FireAIPipeline Class
-
-**Constructor parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `detector_conf` | float | 0.25 | Passed to `FireDetector` |
-| `device` | str | "cpu" | Passed to `FireDetector` |
-| `target_fps` | int | 5 | Target processing frame rate |
-| `on_results` | Callable or None | None | Optional callback invoked after every frame |
-
-**Internal state:**
-
-| Attribute | Type | Purpose |
-|-----------|------|---------|
-| `frame_idx` | int | Monotonically increasing frame counter |
-| `fps` | float | Rolling FPS computed over last 30 frames |
-| `total_detected` | int | Cumulative count of all detections across all frames |
-| `_fps_times` | list[float] | Timestamps of last 30 processed frames |
-| `_latest_detections` | List[Detection] | Most recent frame's detections |
-
-#### `process_frame()` method (lines 39–62)
-
-1. Increments `frame_idx`.
-2. Calls `self.detector.detect(frame)` — the only inference call.
-3. Appends current timestamp to `_fps_times`; keeps only the most recent 30.
-4. Computes rolling FPS: `count / elapsed` over the 30-frame window.
-5. Invokes `on_results(detections, frame)` if a callback is registered.
-6. Logs at DEBUG level: frame number, processing time, detection count.
-7. Returns `List[Detection]`.
-
-#### `annotate_frame()` method (lines 64–88)
-
-Imports `cv2` lazily (inside the function body) — if OpenCV is not installed, the method returns the original frame unchanged.
-
-For each detection:
-- Draws a rectangle: **red** `(0, 0, 255)` for fire, **orange** `(0, 165, 255)` for smoke.
-- Measures text label with `cv2.getTextSize()` to size the background chip.
-- Draws a black filled rectangle behind the label for contrast.
-- Writes label text: e.g. `"fire 85%"` (confidence shown as integer percent).
-
-After all detections, draws HUD text at the bottom-left:
-```
-FPS:24  Fire:1  Smoke:0  Model:fire-detection
-```
-
-HUD color logic:
-- Red if any fire detected
-- Orange if smoke only
-- Green if nothing detected
-
-#### `get_stats()` method (lines 90–134)
-
-Returns a comprehensive statistics dictionary:
-
-```python
-{
-    "fire_count": int,
-    "smoke_count": int,
-    "total_hazards": int,
-    "detections": [
-        {
-            "id": int,         # 1-indexed
-            "bbox": [x1,y1,x2,y2],
-            "label": str,
-            "confidence": float  # rounded to 3 decimal places
-        },
-        ...
-    ],
-    "total_potholes": 0,       # compatibility shim (always 0)
-    "fps": float,
-    "frame_count": int,
-    "avg_confidence": float,   # 0.0 if no detections
-    "severity_score": float,   # 0.0 – 100.0
-    "severity_label": str,     # "low" | "medium" | "high" | "critical"
-    "model": "fire-detection",
-    "detector": dict,          # FireDetector.info
-    "pipeline_type": "fire",
-    "target_fps": int,
-}
-```
-
-Note: `total_potholes: 0` is a compatibility shim suggesting this pipeline shares an API contract with a separate pothole detection pipeline.
-
-#### `info` property (lines 136–145)
-
-Returns pipeline metadata — detector info, tracker (none), inference backend (none), model name, pipeline type, and target FPS.
-
----
-
-### src/download_weights.py
-
-**File:** `src/download_weights.py`  
-**Lines:** 47  
-**Role:** Standalone weight management utilities; can be run directly with `python -m src.download_weights`.
-
-**Module-level side effect at import:** Calls `_load_env_file()` which reads a `.env` file from the project root (if present) and injects any found `KEY=VALUE` pairs into `os.environ`. This is done only for keys not already set in the environment (safe, non-overriding).
-
-**Functions:**
-
-| Function | Signature | Behavior |
-|----------|-----------|----------|
-| `download_weights` | `(weights_url=None) -> Path` | Always downloads (re-downloads if present) |
-| `ensure_weights` | `(weights_url=None) -> Path` | Downloads only if file is absent; idempotent |
-
-Both resolve the URL from: argument → `FIRE_MODEL_HF_URL` env var → hardcoded Hugging Face URL.
-
-When run as `__main__`, calls `ensure_weights()` and prints the output path.
-
----
-
-### run.py
-
-**File:** `run.py`  
-**Lines:** 99  
-**Role:** CLI entry point. Parses arguments, instantiates the pipeline, and dispatches to the appropriate processing function.
-
-#### Three operating functions
-
-**`process_image(pipeline, source_path, output_path)`** (lines 9–19):
-1. `cv2.imread()` — exits with error if unreadable.
-2. `pipeline.process_frame(frame)` → detections.
-3. `pipeline.annotate_frame(frame, detections)` → annotated frame.
-4. `cv2.imwrite(output_path, annotated)`.
-
-**`process_video(pipeline, source_path, output_path)`** (lines 21–53):
-1. Opens with `cv2.VideoCapture`.
-2. Reads `CAP_PROP_FRAME_WIDTH`, `CAP_PROP_FRAME_HEIGHT`, `CAP_PROP_FPS`.
-3. Creates `cv2.VideoWriter` with `mp4v` codec.
-4. Frame loop uses `cap.grab()` + `cap.retrieve()` (two-step retrieval — more efficient than `cap.read()` for skipping frames).
-5. Logs progress every 30 frames.
-6. Releases both capture and writer on completion.
-
-**`process_webcam(pipeline, camera_index=0)`** (lines 55–75):
-1. Opens `cv2.VideoCapture(camera_index)`.
-2. Runs an infinite loop: read → detect → annotate → `cv2.imshow`.
-3. Exits when `q` is pressed (`cv2.waitKey(1) & 0xFF == ord('q')`).
-4. Releases capture and destroys windows.
-
-#### CLI argument dispatch (lines 77–98)
+### 4.3 Module 3 — Temporal Transformer for Fire Progression Prediction
+
+#### Problem Formulation
+
+Given T=15 consecutive frames of fire features X = {x1, ..., x15} where xt in R^8, predict:
+
+- y_g in {stable, growing, critical} — growth classification
+- y_r in [0, 100] — risk score
+- y_a5 in R+ — predicted fire area in 5 seconds
+- y_a10 in R+ — predicted fire area in 10 seconds
+
+#### Feature Vector (8-dimensional, per frame)
+
+| Index | Feature | Description |
+|-------|---------|-------------|
+| 0 | fire_area | Fire bbox area / frame area |
+| 1 | smoke_area | Smoke bbox area / frame area |
+| 2 | fire_count | Number of fire detections |
+| 3 | smoke_count | Number of smoke detections |
+| 4 | avg_confidence | Mean detection confidence |
+| 5 | growth_rate | fire_area_t - fire_area_{t-1} |
+| 6 | centroid_x | Normalized fire centroid X |
+| 7 | centroid_y | Normalized fire centroid Y |
+
+#### Model Architecture
 
 ```
---source webcam     → process_webcam()
---source *.mp4/avi/mov/mkv → process_video()
---source <anything else>   → process_image()
+Input: (B x 15 x 8)
+  |
+  v
+Linear(8 -> 64)
+  |
+  v
+Sinusoidal Positional Encoding (d_model=64)
+  |
+  v
+TransformerEncoder:
+  layers=3, heads=4, d_model=64, ff=256, dropout=0.1
+  |
+  v
+LayerNorm(64) -> Mean pooling over T=15 -> R^64
+  |
+  +------------------+------------------+------------------+
+  |                  |                  |                  |
+  v                  v                  v                  v
+growth_head      risk_head          area_5s_head      area_10s_head
+Linear(64,32)    Linear(64,32)      Linear(64,32)     Linear(64,32)
+ReLU             ReLU               ReLU              ReLU
+Linear(32,3)     Linear(32,1)       Linear(32,1)      Linear(32,1)
+                 Sigmoid x100       ReLU              ReLU
+  |                  |                  |                  |
+  v                  v                  v                  v
+logits(3)       risk in[0,100]      area_5s           area_10s
+
+Total parameters: ~85,000
 ```
 
-The output path defaults smart: if source is video but `--output` was not set (still at default `"output.jpg"`), the code switches the output to `"output.mp4"`.
+#### Self-Supervised Labeling Strategy
 
-Pipeline is created once and shared across the entire run:
-
-```python
-pipeline = FireAIPipeline(detector_conf=args.conf, device=args.device, target_fps=30)
-```
-
-Note: `target_fps=30` is hardcoded in `run.py` — the `--fps` flag is not exposed in the CLI.
-
----
-
-## 8. Data Flow and Execution Model
+Labels are automatically derived from YOLO detections using fire area growth rate — no manual annotation required:
 
 ```
-User Input (image / video file / webcam)
-        │
-        ▼
-    run.py (CLI)
-        │
-        ├─── cv2.VideoCapture / cv2.imread
-        │
-        ▼
-  FireAIPipeline.process_frame(frame: np.ndarray)
-        │
-        ├─── updates frame_idx, timestamps, rolling FPS
-        │
-        ├─── FireDetector.detect(frame)
-        │         │
-        │         ├─── model.predict(source=frame, imgsz=640, conf=0.25, iou=0.45)
-        │         │         [YOLOv8n inference via Ultralytics]
-        │         │
-        │         └─── returns List[Detection]
-        │                  each Detection has: bbox, confidence, class_id, label, crop
-        │
-        ├─── optionally calls on_results(detections, frame)
-        │
-        └─── returns List[Detection]
-                 │
-                 ▼
-  FireAIPipeline.annotate_frame(frame, detections)
-        │
-        ├─── draws bounding boxes (red=fire, orange=smoke)
-        ├─── draws label chips with confidence %
-        ├─── draws HUD overlay (FPS, counts, model name)
-        └─── returns annotated frame (np.ndarray)
-                 │
-                 ▼
-  Output: cv2.imwrite / cv2.VideoWriter / cv2.imshow
+growth_5s = (fire_area_{t + fps*5} - fire_area_t) / fire_area_t
+
+growth_5s > 0.60  ->  critical  (label=2)
+growth_5s > 0.30  ->  growing   (label=1)
+otherwise         ->  stable    (label=0)
+
+risk_score = min(100, |growth_5s| x 100)
 ```
 
----
-
-## 9. Detection Output and Annotation System
-
-### Detection Object Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `bbox` | `List[int]` | `[x1, y1, x2, y2]` pixel coordinates |
-| `confidence` | `float` | Model confidence, 0.0–1.0 |
-| `class_id` | `int` | `0` for smoke, `1` for fire |
-| `label` | `str` | `"smoke"` or `"fire"` |
-| `crop` | `np.ndarray` | Pixel-cropped region from the frame |
-| `.width` | `int` (property) | `x2 - x1` |
-| `.height` | `int` (property) | `y2 - y1` |
-
-### Visual Annotation Colors (BGR)
-
-| Class | Color Name | BGR Value |
-|-------|-----------|-----------|
-| fire | Red | `(0, 0, 255)` |
-| smoke | Orange | `(0, 165, 255)` |
-
-### HUD Overlay
-
-Rendered at bottom-left with `cv2.FONT_HERSHEY_SIMPLEX`, scale 0.45, line type `cv2.LINE_AA`.
-
-Format: `FPS:{fps:.0f}  Fire:{fire_count}  Smoke:{smoke_count}  Model:fire-detection`
-
-HUD color: red if fire detected, orange if only smoke, green if nothing.
-
-### Label Format
-
-Text drawn above each bounding box: `"{label} {confidence*100:.0f}%"` e.g. `"fire 87%"`
-
-Black background chip sized to the text using `cv2.getTextSize()`, ensuring readability on any background.
-
----
-
-## 10. Severity Scoring System
-
-The pipeline computes a real-time severity score per frame:
-
-```
-severity_score = min(100.0, (fire_count × 45) + (smoke_count × 20) + (fps × 2))
-```
-
-| Score Range | Label |
-|-------------|-------|
-| 70 – 100 | `"critical"` |
-| 40 – 69 | `"high"` |
-| 15 – 39 | `"medium"` |
-| 0 – 14 | `"low"` |
-
-**Score contribution analysis:**
-- 1 fire detection alone → score of 45 (high)
-- 2 fire detections → score of 90 (critical)
-- 1 smoke only → score of 20 (medium)
-- 3 smoke → score of 60 (high)
-- FPS contributes a small additive bias (e.g., 30 FPS adds 60 points)
-
-**Note:** The FPS term in the severity formula is anomalous — it means even with 0 detections and high FPS, the score will not be 0 (the function returns 0 only if `total_hazards == 0`, which correctly bypasses the formula).
-
-The score is only non-zero when `total_hazards > 0`:
-
-```python
-severity_score = 0.0
-if total_hazards > 0:
-    severity_score = min(100.0, round((fire_count * 45) + (smoke_count * 20) + (self.fps * 2), 1))
-```
-
----
-
-## 11. CLI Interface
-
-Entry point: `python run.py`
-
-```
-usage: run.py [-h] [--source SOURCE] [--output OUTPUT] [--conf CONF] [--device DEVICE]
-
-Standalone Fire Detection
-
-optional arguments:
-  --source SOURCE   Path to input image or video, or 'webcam' for camera  [REQUIRED]
-  --output OUTPUT   Path to save output (default: output.jpg)
-  --conf CONF       Confidence threshold, 0.0–1.0 (default: 0.25)
-  --device DEVICE   Inference device: cpu, cuda, or GPU index (default: cpu)
-```
-
-**Supported video formats:** `.mp4`, `.avi`, `.mov`, `.mkv`  
-**Exit behavior:** exits with code 1 if `--source` is not provided.
-
-**Example commands:**
-
-```bash
-# Image
-python run.py --source image.jpg --output result.jpg
-
-# Video
-python run.py --source footage.mp4 --output out.mp4 --conf 0.3
-
-# Webcam with CUDA
-python run.py --source webcam --device cuda
-
-# GPU with higher confidence
-python run.py --source image.jpg --conf 0.5 --device cuda
-```
-
----
-
-## 12. Library API
-
-The `src` package can be used as a Python library:
-
-```python
-import cv2
-from src.pipeline import FireAIPipeline
-from src.detector import FireDetector, Detection
-
-# Full pipeline (recommended)
-pipeline = FireAIPipeline(
-    detector_conf=0.3,    # confidence threshold
-    device="cpu",         # or "cuda"
-    target_fps=30,        # used for FPS tracking window
-    on_results=None,      # optional callback: fn(detections, frame)
-)
-
-frame = cv2.imread("image.jpg")
-detections = pipeline.process_frame(frame)   # returns List[Detection]
-annotated = pipeline.annotate_frame(frame, detections)  # returns np.ndarray
-stats = pipeline.get_stats()                 # returns dict (see Section 7)
-
-# Raw detector (no annotation, no stats)
-detector = FireDetector(conf_threshold=0.25, device="cpu")
-detections = detector.detect(frame)
-
-# Weight download utilities
-from src.download_weights import ensure_weights, download_weights
-path = ensure_weights()    # only downloads if absent
-path = download_weights()  # always downloads
-```
-
-### Callback Pattern
-
-```python
-def on_detection(detections, frame):
-    for d in detections:
-        print(f"{d.label} at {d.bbox} ({d.confidence:.2f})")
-
-pipeline = FireAIPipeline(on_results=on_detection)
-```
-
----
-
-## 13. Model Weight Management
-
-### Automatic Download
-
-On first construction of `FireDetector`, if `src/weights/fire_detection_yolov8m.pt` is absent:
-1. `_load_model()` calls `_download_weights()`.
-2. URL resolved from: constructor `weights_url` arg → `FIRE_MODEL_HF_URL` env var → hardcoded Hugging Face URL.
-3. Streamed HTTP GET with 30-second timeout, 8 KB chunks.
-4. On failure: partial file deleted, `RuntimeError` raised.
-
-### Manual Download
-
-```bash
-python -m src.download_weights
-```
-
-### Override URL
-
-Via `.env` at project root:
-
-```env
-FIRE_MODEL_HF_URL=https://your-host.com/custom_weights.pt
-```
-
-Or via environment variable:
-
-```bash
-set FIRE_MODEL_HF_URL=https://your-host.com/custom_weights.pt  # Windows
-export FIRE_MODEL_HF_URL=https://your-host.com/custom_weights.pt  # Unix
-```
-
-### Graceful Degradation
-
-If weights cannot be downloaded or found, `FireDetector.available` is set to `False` and `detect()` returns an empty list — the system continues running without crashing.
-
-### .gitignore Rules for Weights
-
-```gitignore
-src/weights/
-weights/
-*.pt
-*.onnx
-fire_detection_yolov8m.pt
-```
-
-The `.gitattributes` file explicitly marks weight directories as binary (`-text`) to prevent line-ending conversion:
-
-```gitattributes
-src/weights/** -text
-weights/** -text
-```
-
----
-
-## 14. Dataset Information
-
-### Dataset Name
-
-**D-Fire** — strongly inferred from the embedded training run name `yolov8n-dfire` in the checkpoint's `train_args['name']`. Not confirmed via `data.yaml` (absent from repository).
-
-### Dataset Source
-
-Likely Kaggle — inferred from the embedded `data.yaml` path: `/Users/rbh/Downloads/archive/data.yaml`. The `/Downloads/archive/` path pattern is characteristic of a Kaggle dataset archive download on macOS.
-
-### What Is Confirmed (From Checkpoint)
+#### Training Dataset — UniDataPro Fire Videos
 
 | Property | Value |
 |----------|-------|
-| Number of classes | 2 |
-| Class labels | `{0: 'smoke', 1: 'fire'}` |
-| Training image size | 640 × 640 |
-| Dataset fraction used | 1.0 (100%) |
+| Source | kaggle: unidpro/fire-and-smoke-dataset |
+| Videos | 85 fire/smoke videos |
+| Sequence length | 15 frames (sliding window) |
+| Augmentation | Gaussian noise x5 copies (std=0.01) |
+| Train/Val split | 80% / 20% |
 
-### What Is Not In This Repository
+`[ADD AFTER TRAINING]`
 
-- `data.yaml`
-- Training image count
-- Validation image count
-- Test image count
-- Dataset splits ratio
+| Split | Sequences | Stable | Growing | Critical |
+|-------|-----------|--------|---------|---------|
+| Train | [ADD] | [ADD] | [ADD] | [ADD] |
+| Validation | [ADD] | [ADD] | [ADD] | [ADD] |
 
-### Hugging Face Model Source
+#### Training Configuration
 
-The weights were obtained from: `https://huggingface.co/rabahdev/fire-smoke-yolov8n`
+| Hyperparameter | Value |
+|---------------|-------|
+| Optimizer | Adam |
+| Learning rate | 0.001 |
+| Weight decay | 1e-4 |
+| Batch size | 64 |
+| Max epochs | 50 |
+| Early stopping patience | 10 |
+| LR scheduler | ReduceLROnPlateau (factor=0.5) |
+| Gradient clipping | max_norm=1.0 |
 
-Original file: `best.pt` (renamed locally to `fire_detection_yolov8m.pt`)
-
----
-
-## 15. Configuration and Environment
-
-### Logging
-
-Configured in `run.py`:
-
-```python
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
+**Combined multi-task loss:**
+```
+L = L_CE(growth) + 0.3 * L_MSE(risk) + 0.2 * L_MSE(area_5s) + 0.2 * L_MSE(area_10s)
 ```
 
-Each module uses its own named logger (`logging.getLogger(__name__)`). The pipeline logs at DEBUG level for per-frame timing; detector logs at INFO for model load events and at WARNING/ERROR for download failures.
+#### Temporal Transformer Results — `[ADD AFTER TRAINING]`
 
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FIRE_MODEL_HF_URL` | `https://huggingface.co/rabahdev/fire-smoke-yolov8n/resolve/main/best.pt` | Override for model weight download URL |
-
-### .env File Support
-
-`src/download_weights.py` reads a `.env` file from the project root on import. Supports `KEY=VALUE` format with `#` comments. Does not override already-set environment variables.
-
-### Git Configuration
-
-`.gitattributes` enforces:
-- Unix line endings (`eol=lf`) for all `.py`, `.md`, `.yml`, `.yaml` files
-- Binary treatment (`-text`) for all files under `src/weights/` and `weights/`
+| Metric | Value |
+|--------|-------|
+| Validation loss | [ADD] |
+| Growth accuracy (overall) | [ADD]% |
+| Accuracy — stable | [ADD]% |
+| Accuracy — growing | [ADD]% |
+| Accuracy — critical | [ADD]% |
+| Risk score MAE | [ADD] |
+| Area-5s MAE | [ADD] |
+| Area-10s MAE | [ADD] |
+| Inference time | [ADD] ms |
 
 ---
 
-## 16. Git History and Development Timeline
+### 4.4 Module 4 — Automated NLG Incident Reporter
 
-All commits authored by `vipul1029 <tovipul.kr@gmail.com>`. The entire codebase was written in a single session on **2026-08-19**.
+#### Spatial Region Mapping
 
-| Commit | Hash | Date | Description | Files Changed |
-|--------|------|------|-------------|---------------|
-| 1 | `ccee9ce` | Aug 19, 02:04 | chore: add git configuration | `.gitattributes`, `.gitignore` |
-| 2 | `bd1cd82` | Aug 19, 02:06 | docs: add project documentation | `README.md` (88 lines added) |
-| 3 | `1885b09` | Aug 19, 02:06 | chore: add project dependencies | `requirements.txt` (5 lines) |
-| 4 | `48bfd36` | Aug 19, 02:06 | feat: add application entry point | `run.py` (98 lines) |
-| 5 | `9ca70b6` | Aug 19, 02:09 | Update README.md | `README.md` (1 line) |
-| 6 | `0d12619` | Aug 19, 02:18 | docs: update project documentation | `README.md` (+251/-55 lines) |
-| 7 | `5234b6e` | Aug 19, 02:19 | feat: initialize detection module | `src/__init__.py` (8 lines) |
-| 8 | `10ca1a2` | Aug 19, 02:19 | feat: add fire and smoke detector | `src/detector.py` (174 lines) |
-| 9 | `2f3e850` | Aug 19, 02:19 | feat: add detection pipeline | `src/pipeline.py` (145 lines) |
-| 10 | `2744222` | Aug 19, 02:19 | feat: add model weight downloader | `src/download_weights.py` (46 lines) |
-| 11 | `611013a` | Aug 19, 02:22 | chore: ignore test and generated files | `.gitignore` (5 lines added) |
+Frame divided into 3x3 grid for location naming:
 
-**Total tracked source code:** ~476 lines of Python across 5 files.
+```
++------------+------------+------------+
+| northwest  |  northern  | northeast  |
++------------+------------+------------+
+|  western   |  central   |  eastern   |
++------------+------------+------------+
+| southwest  |  southern  | southeast  |
++------------+------------+------------+
 
----
+region_col = int(centroid_x / width  * 3)
+region_row = int(centroid_y / height * 3)
+```
 
-## 17. File Inventory
+#### Trend Analysis (60-frame history)
 
-### Source-Controlled Files
+```
+slope = (area[-1] - area[-10]) / 10
 
-| File | Size (approx) | Lines | Purpose |
-|------|--------------|-------|---------|
-| `src/__init__.py` | ~180 B | 8 | Package API surface |
-| `src/detector.py` | ~6.5 KB | 175 | Model + inference |
-| `src/pipeline.py` | ~5.5 KB | 146 | Orchestration + annotation |
-| `src/download_weights.py` | ~1.5 KB | 47 | Weight utilities |
-| `run.py` | ~3.4 KB | 99 | CLI entry point |
-| `requirements.txt` | 73 B | 5 | Dependencies |
-| `README.md` | 6.5 KB | 285 | User documentation |
-| `.gitignore` | 707 B | 60 | Version control exclusions |
-| `.gitattributes` | 130 B | 8 | Line ending and binary rules |
+slope > 0.005   ->  "increasing"
+slope < -0.005  ->  "decreasing"
+otherwise       ->  "stable"
+```
 
-### Untracked / Gitignored Files Present Locally
+#### LLM Prompt Template
 
-| File | Size | Description |
-|------|------|-------------|
-| `inputvideo.mp4` | ~2.5 MB | Sample input video |
-| `output.mp4` | ~14.4 MB | Generated output video (latest run) |
-| `result.mp4` | ~14.4 MB | Another generated result video |
-| `output.jpg` | ~10.5 KB | Sample annotated image output |
-| `test_image.jpg` | ~5.3 KB | Sample test input image |
-| `DATASET_IDENTIFICATION_REPORT.md` | 14.6 KB | Deep checkpoint analysis |
-| `PRESENTATION_CONTENT_AND_SOURCES.md` | 18.4 KB | Presentation source material |
-| `SECTION_3_PROJECT_METHODOLOGY.md` | 63.8 KB | Methodology document |
-| `Fire_Smoke_Detection_Research_Presentation.pptx` | 53.4 KB | Initial presentation |
-| `Fire_Smoke_Detection_Research_Presentation_FINAL.pptx` | 54.6 KB | Final presentation |
-| `gen_final.py` | 42.6 KB | Presentation generation script |
-| `generate_presentation.py` | 52.2 KB | Presentation generation script |
-| `.venv/` | Large | Python virtual environment |
+```
+You are a fire safety monitoring AI. Write exactly 2 sentences based on the data below.
+Sentence 1: describe the incident (what, where, how long, severity).
+Sentence 2: give a safety recommendation.
 
----
+- Fire detections: {fire_count}
+- Smoke detections: {smoke_count}
+- Confidence: {avg_conf}%
+- Location: {region}
+- Trend: {trend}
+- Consecutive frames: {consecutive}
+- Severity: {severity}
+- AI fire progression: {growth_label} (risk: {risk}/100)
+```
 
-## 18. Known Issues and Discrepancies
+#### Non-Blocking Design
 
-### 1. Model Filename Mismatch
+```
+Frame N (interval fires)
+  -> Previous report stays on screen
+  -> Background thread starts
+       -> Ollama called (timeout 10s)
+           Success -> LLM report saved
+           Failure -> Rule-based report generated in thread
+  -> ready_report set
 
-The weights file is named `fire_detection_yolov8m.pt` (implying medium) but the actual architecture embedded in the checkpoint is **YOLOv8n (nano)**, confirmed by `depth_multiple=0.33`, `width_multiple=0.25`, and parameter count of ~3M.
+Frame N+k
+  -> ready_report swapped to display
+  -> No flicker, Ollama always tried first
+```
 
-The `README.md` incorrectly states "Architecture: YOLOv8 medium". Any research or documentation should state **YOLOv8n**.
+#### Example LLM Output
 
-### 2. Training vs. Inference Version Mismatch
+Description:
+> "High-confidence fire and smoke detected in the northeast region of the monitored area, persisting across 18 consecutive frames with increasing smoke density indicating active fire spread."
 
-The model was trained with Ultralytics `8.4.51` but the project pins inference to `8.2.18`. This is a minor version gap and unlikely to cause issues but could theoretically affect certain model behaviors.
-
-### 3. FPS Term in Severity Score
-
-The severity score formula includes `self.fps * 2`. At 30 FPS this adds 60 points to the score — which is significant. However, severity is only computed when `total_hazards > 0`, so this does not cause false alarms with zero detections. It does mean the same detection count at higher FPS will produce a higher severity score, which may not reflect actual risk.
-
-### 4. `total_potholes: 0` in `get_stats()`
-
-The stats dict includes `"total_potholes": 0` — a compatibility field for a shared API with a pothole detection pipeline. This has no functional impact on this module.
-
-### 5. Webcam Frame Retrieval vs. Video Frame Retrieval
-
-`process_image` and `process_webcam` use `cap.read()` (single-step). `process_video` uses `cap.grab()` + `cap.retrieve()` (two-step). Both are correct for their use cases, but the inconsistency is worth noting.
-
-### 6. Target FPS Not Enforced
-
-`target_fps` is stored and used for the rolling FPS window size, and exposed in `info` and `get_stats()`, but **it does not actually throttle the processing rate**. Frames are processed as fast as possible regardless of `target_fps`. The parameter is effectively a metadata field.
-
-### 7. No Thread Safety
-
-`FireAIPipeline` maintains mutable state (`frame_idx`, `_fps_times`, `_latest_detections`) without locks. This is safe for single-threaded use but would produce race conditions if `process_frame()` and `get_stats()` were called from different threads concurrently.
+Recommendation:
+> "Immediate evacuation of the northeast zone is recommended; contact emergency services and activate fire suppression systems without delay."
 
 ---
 
-## 19. Summary of Verified Facts
+## 5. IMPLEMENTATION
 
-| Category | Fact | Source |
-|----------|------|--------|
-| Architecture | YOLOv8n (nano), NOT medium | Checkpoint `model.yaml` |
-| Parameters | 3,011,238 | `model.info()` |
-| Layers | 226 | `model.info()` |
-| Classes | 2: smoke (0), fire (1) | `model.names`, `detector.py:70` |
-| Input size | 640 × 640 px | `train_args['imgsz']` |
-| Training epochs | 50 | `train_args['epochs']` |
-| Batch size | 16 | `train_args['batch']` |
-| Optimizer | auto | `train_args['optimizer']` |
-| Initial LR | 0.01 | `train_args['lr0']` |
-| Momentum | 0.937 | `train_args['momentum']` |
-| Weight decay | 0.0005 | `train_args['weight_decay']` |
-| Early stopping | 15 epochs patience | `train_args['patience']` |
-| Training device | Apple Silicon (mps) | `train_args['device']` |
-| Training date | 2026-05-20 | `ckpt['date']` |
-| Training IoU | 0.7 | `train_args['iou']` |
-| Inference conf | 0.25 (default) | `detector.py:57` |
-| Inference IoU | 0.45 | `detector.py:58` |
-| mAP@0.5 (final) | 0.76498 (76.5%) | `train_metrics` |
-| mAP@0.5:0.95 (final) | 0.44460 (44.5%) | `train_metrics` |
-| Precision (final) | 0.77529 (77.5%) | `train_metrics` |
-| Recall (final) | 0.69452 (69.5%) | `train_metrics` |
-| Dataset | D-Fire (strongly inferred) | run name `yolov8n-dfire` |
-| Dataset source | Likely Kaggle (inferred) | path `/Downloads/archive/` |
-| Training framework | Ultralytics 8.4.51 | `ckpt['version']` |
-| Inference framework | Ultralytics 8.2.18 | `requirements.txt` |
-| AMP training | Enabled | `train_args['amp']` |
-| Transfer learning | Yes (pretrained) | `train_args['pretrained']` |
-| Weight host | Hugging Face `rabahdev/fire-smoke-yolov8n` | `detector.py:66` |
-| Project type | Real-time fire and smoke detection system | `run.py`, `src/` |
-| Supported inputs | Images, MP4/AVI/MOV/MKV videos, webcam | `run.py:94` |
-| Python requirement | 3.9+ | README |
-| OS support | Windows, macOS, Linux | README |
+### Hardware
+
+| Component | Specification |
+|-----------|---------------|
+| GPU | NVIDIA GeForce RTX 4050 Laptop GPU |
+| VRAM | 6 GB GDDR6 |
+| CUDA | 13.3 |
+| OS | Windows 11 |
+| CPU | [ADD your CPU] |
+| RAM | [ADD your RAM] |
+
+### Software Stack
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Python | 3.10.11 | Runtime |
+| PyTorch | 2.6.0+cu124 | Deep learning |
+| Ultralytics | 8.x | YOLOv8m |
+| OpenCV | 4.x | Frame processing |
+| NumPy | 1.26.4 | Arrays |
+| Ollama | Latest | Local LLM server |
+| Phi-3 Mini | 2.2B params | Incident report LLM |
 
 ---
 
-*This report was generated on 2026-09-11 by deep static analysis of all source files, git history, the `.pt` model checkpoint metadata (as documented in `DATASET_IDENTIFICATION_REPORT.md`), and the README.*
+## 6. EXPERIMENTS & ABLATION STUDY
+
+### Experiment A — Detector Comparison
+
+| Configuration | mAP@0.5 | FPS |
+|--------------|---------|-----|
+| YOLOv8n (baseline) | [ADD] | [ADD] |
+| YOLOv8m (proposed) | [ADD] | [ADD] |
+
+### Experiment B — False Alarm Reduction Stages
+
+| Configuration | False Alarms | True Positives Retained |
+|--------------|-------------|------------------------|
+| No verification (baseline) | [ADD] | 100% |
+| Stage 1 only (HSV) | [ADD] | [ADD]% |
+| Stage 1+2 (HSV+Persistence) | [ADD] | [ADD]% |
+| All 3 stages (proposed) | [ADD] | [ADD]% |
+
+### Experiment C — Temporal Transformer
+
+| Configuration | Growth Accuracy | Risk MAE |
+|--------------|----------------|---------|
+| No prediction (baseline) | — | — |
+| With Temporal Transformer | [ADD] | [ADD] |
+
+### End-to-End System Performance — `[ADD AFTER TRAINING]`
+
+| Metric | Value |
+|--------|-------|
+| FPS (all modules, GPU) | [ADD] |
+| Total latency per frame | [ADD] ms |
+| Memory usage (GPU) | [ADD] MB |
+
+---
+
+## 7. COMPLETE RESULTS SUMMARY — `[ADD AFTER TRAINING]`
+
+| Metric | Value |
+|--------|-------|
+| YOLOv8m mAP@0.5 | [ADD]% |
+| YOLOv8m mAP@0.5:0.95 | [ADD]% |
+| YOLOv8m Precision | [ADD]% |
+| YOLOv8m Recall | [ADD]% |
+| False alarm reduction | [ADD]% |
+| True positive retention | [ADD]% |
+| Growth classification accuracy | [ADD]% |
+| Risk score MAE | [ADD] |
+| End-to-end FPS | [ADD] |
+
+---
+
+## 8. PAPER WRITING CHECKLIST
+
+### Sections
+- [ ] Abstract — update with real numbers after training
+- [ ] Introduction — adapt Section 1 to paper format
+- [ ] Related Work — expand with more citations from Section 2
+- [ ] System Architecture — add block diagram figure
+- [ ] Methodology — core of paper, use Section 4
+- [ ] Implementation — hardware/software, Section 5
+- [ ] Experiments & Results — fill all tables after training
+- [ ] Discussion — limitations + future work
+- [ ] Conclusion
+- [ ] References
+
+### Figures to Create
+- [ ] Figure 1: Full system architecture block diagram
+- [ ] Figure 2: Three-stage false alarm reduction pipeline
+- [ ] Figure 3: Temporal Transformer architecture
+- [ ] Figure 4: Incident reporter flow (Ollama + fallback)
+- [ ] Figure 5: Sample detections (true positives)
+- [ ] Figure 6: False alarm rejection examples (one per stage)
+- [ ] Figure 7: YOLOv8m training curves (loss, mAP vs epoch)
+- [ ] Figure 8: Temporal Transformer training loss curve
+- [ ] Figure 9: Incident report overlay screenshot
+
+### Numbers to Record After Training
+- [ ] mAP@0.5, mAP@0.5:0.95, precision, recall (overall + per class)
+- [ ] Best epoch (from early stopping)
+- [ ] YOLOv8m training time
+- [ ] Number of sequences extracted from 85 videos
+- [ ] Class distribution (stable/growing/critical counts and percentages)
+- [ ] Temporal Transformer: val loss, accuracy, MAE values
+- [ ] Temporal Transformer training time
+- [ ] End-to-end FPS with all modules running
+- [ ] False alarms rejected per stage (run on held-out test set)
+
+---
+
+## 9. SUGGESTED JOURNALS / CONFERENCES
+
+| Venue | Type | Fit |
+|-------|------|-----|
+| Expert Systems with Applications (Elsevier) | Journal | Best fit — applied AI |
+| IEEE Access | Journal | Good fit — broad engineering |
+| Fire Safety Journal (Elsevier) | Journal | Domain-specific, strong fit |
+| Engineering Applications of AI (Elsevier) | Journal | Good fit |
+| Pattern Recognition Letters | Journal | Computer vision focus |
+| IEEE CVPR / ICCV | Conference | High impact, competitive |
+
+**Recommended first target:** Expert Systems with Applications or IEEE Access — both accept applied AI papers, have reasonable review timelines, and are well matched to this work.
