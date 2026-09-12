@@ -56,11 +56,13 @@ class FireDetector:
         input_size: int = 640,
         device: str = "cpu",
         weights_url: Optional[str] = None,
+        enable_verification: bool = True,
     ):
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.input_size = input_size
         self.device = device
+        self.enable_verification = enable_verification
         self.weights_url = weights_url or os.getenv(
             "FIRE_MODEL_HF_URL",
             "https://huggingface.co/rabahdev/fire-smoke-yolov8n/resolve/main/best.pt"
@@ -69,6 +71,10 @@ class FireDetector:
         self.backend = "yolo"
         self.class_names = {0: "smoke", 1: "fire"}
         self.available = False
+
+        # Verification rejection counters (for research metrics)
+        self.color_rejected = 0
+        self.texture_rejected = 0
 
         WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
         self._load_model()
@@ -118,6 +124,73 @@ class FireDetector:
                 output_path.unlink()
             raise RuntimeError(f"Failed to download weights: {e}") from e
 
+    # ── Stage 1: HSV Color Verification ──────────────────────────────────────
+
+    def _verify_color(self, crop: np.ndarray, label: str) -> bool:
+        """
+        Stage 1 — HSV Color Verification.
+
+        Fire occupies a specific hue range (red-orange-yellow) with high
+        saturation and brightness. Smoke appears as low-saturation grey.
+        Rejects false alarms from sunsets, tail lights, and reflections.
+        """
+        try:
+            import cv2
+        except ImportError:
+            return True  # skip if cv2 unavailable
+
+        if crop is None or crop.size == 0:
+            return False
+
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+
+        if label == "fire":
+            # Fire: red-orange-yellow hues (0-35 and wraparound 160-180)
+            # with high saturation (>100) and high brightness (>100)
+            mask1 = cv2.inRange(hsv,
+                                np.array([0, 100, 100]),
+                                np.array([35, 255, 255]))
+            mask2 = cv2.inRange(hsv,
+                                np.array([160, 100, 100]),
+                                np.array([180, 255, 255]))
+            mask = cv2.bitwise_or(mask1, mask2)
+        else:
+            # Smoke: very low saturation (grey/white), medium-high brightness
+            mask = cv2.inRange(hsv,
+                               np.array([0, 0, 80]),
+                               np.array([180, 60, 220]))
+
+        pixel_ratio = np.count_nonzero(mask) / mask.size
+        threshold = 0.12 if label == "fire" else 0.10
+        return pixel_ratio > threshold
+
+    # ── Stage 3: Texture Chaos Verification ──────────────────────────────────
+
+    def _verify_texture(self, crop: np.ndarray, label: str) -> bool:
+        """
+        Stage 3 — Laplacian Texture Chaos Verification.
+
+        Fire and smoke have high-frequency, chaotic textures. Uniform objects
+        such as red signs, indicator lights, and walls produce low Laplacian
+        variance. Rejects false alarms from static, smooth-surfaced objects.
+        """
+        try:
+            import cv2
+        except ImportError:
+            return True
+
+        if crop is None or crop.size == 0:
+            return False
+
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+        # Fire is more chaotic than smoke; smoke can be diffuse
+        threshold = 200.0 if label == "fire" else 80.0
+        return laplacian_var > threshold
+
+    # ── Inference ─────────────────────────────────────────────────────────────
+
     def detect(self, frame: np.ndarray) -> List[Detection]:
         if self.model is None:
             return []
@@ -149,6 +222,20 @@ class FireDetector:
                     continue
 
                 crop = frame[y1:y2, x1:x2].copy()
+
+                if self.enable_verification:
+                    # Stage 1: HSV color verification
+                    if not self._verify_color(crop, label):
+                        self.color_rejected += 1
+                        logger.debug("Detection rejected by color check: %s", label)
+                        continue
+
+                    # Stage 3: Texture chaos verification
+                    if not self._verify_texture(crop, label):
+                        self.texture_rejected += 1
+                        logger.debug("Detection rejected by texture check: %s", label)
+                        continue
+
                 detections.append(
                     Detection(
                         bbox=[x1, y1, x2, y2],
@@ -171,4 +258,7 @@ class FireDetector:
             "conf_threshold": self.conf_threshold,
             "iou_threshold": self.iou_threshold,
             "device": self.device,
+            "verification_enabled": self.enable_verification,
+            "color_rejected": self.color_rejected,
+            "texture_rejected": self.texture_rejected,
         }
