@@ -10,6 +10,9 @@ from typing import Callable, List, Optional
 import numpy as np
 
 from .detector import Detection, FireDetector
+from .tracker import FireFeatureTracker
+from .predictor import FireProgressionPredictor
+from .reporter import IncidentReporter
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,15 @@ class FireAIPipeline:
             device=device,
             enable_verification=enable_verification,
         )
+
+        # Temporal Transformer predictor
+        self.predictor = FireProgressionPredictor()
+        self.tracker = FireFeatureTracker()
+        self._latest_prediction: dict = {}
+
+        # Natural language incident reporter
+        self.reporter = IncidentReporter(report_interval=30)
+        self._latest_report: dict = {}
 
         self.frame_idx = 0
         self.fps = 0.0
@@ -124,6 +136,18 @@ class FireAIPipeline:
         self._latest_detections = detections
         self.total_detected += len(detections)
 
+        # Temporal Transformer: update tracker and run prediction when ready
+        sequence = self.tracker.update(detections, frame.shape)
+        if sequence is not None and self.predictor.available:
+            self._latest_prediction = self.predictor.predict(sequence)
+
+        # Incident reporter: generate natural language description
+        stats_snapshot = self._quick_stats(detections)
+        self._latest_report = self.reporter.update(
+            detections, stats_snapshot, self.frame_idx,
+            frame.shape, self._latest_prediction or None,
+        )
+
         self._fps_times.append(time.perf_counter())
         if len(self._fps_times) > 30:
             self._fps_times = self._fps_times[-30:]
@@ -141,6 +165,27 @@ class FireAIPipeline:
             len(detections),
         )
         return detections
+
+    def _quick_stats(self, detections: List[Detection]) -> dict:
+        fire_count = sum(1 for d in detections if d.label == "fire")
+        smoke_count = sum(1 for d in detections if d.label == "smoke")
+        total = len(detections)
+        severity_score = min(100.0, (fire_count * 45) + (smoke_count * 20))
+        if severity_score >= 70:
+            severity_label = "critical"
+        elif severity_score >= 40:
+            severity_label = "high"
+        elif severity_score >= 15:
+            severity_label = "medium"
+        else:
+            severity_label = "low"
+        avg_conf = sum(d.confidence for d in detections) / total if total else 0.0
+        return {
+            "fire_count": fire_count,
+            "smoke_count": smoke_count,
+            "avg_confidence": avg_conf,
+            "severity_label": severity_label,
+        }
 
     # ── Annotation ────────────────────────────────────────────────────────────
 
@@ -168,6 +213,54 @@ class FireAIPipeline:
         hud = f"FPS:{self.fps:.0f}  Fire:{fire_count}  Smoke:{smoke_count}  Model:fire-detection"
         hud_color = (0, 0, 255) if fire_count > 0 else ((0, 165, 255) if smoke_count > 0 else (0, 255, 0))
         cv2.putText(out, hud, (8, out.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, hud_color, 1, cv2.LINE_AA)
+
+        # Prediction overlay (shown only when predictor is trained and ready)
+        pred = self._latest_prediction
+        if pred.get("available"):
+            label = pred["growth_label"].upper()
+            risk = pred["risk_score"]
+            conf = pred["growth_confidence"]
+            pred_text = f"PREDICT:{label} ({conf:.0f}%)  Risk:{risk:.0f}/100"
+            p_color = (0, 0, 255) if label == "CRITICAL" else (
+                (0, 165, 255) if label == "GROWING" else (0, 200, 0)
+            )
+            cv2.rectangle(out, (6, 6), (len(pred_text) * 7 + 10, 22), (0, 0, 0), -1)
+            cv2.putText(out, pred_text, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, p_color, 1, cv2.LINE_AA)
+
+        # Incident report overlay — shown at bottom when active
+        report = self._latest_report
+        if report.get("active"):
+            fh, fw = out.shape[:2]
+            severity = report.get("severity", "low")
+            r_color = (
+                (0, 0, 255) if severity == "critical" else
+                (0, 100, 255) if severity == "high" else
+                (0, 165, 255) if severity == "medium" else
+                (0, 200, 100)
+            )
+            # Semi-transparent black bar at bottom
+            overlay = out.copy()
+            cv2.rectangle(overlay, (0, fh - 70), (fw, fh), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.65, out, 0.35, 0, out)
+
+            # Description — truncate to fit width
+            desc = report.get("description", "")
+            max_chars = fw // 7
+            desc_line1 = desc[:max_chars]
+            desc_line2 = desc[max_chars: max_chars * 2] if len(desc) > max_chars else ""
+
+            cv2.putText(out, desc_line1, (6, fh - 52),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+            if desc_line2:
+                cv2.putText(out, desc_line2, (6, fh - 36),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+
+            # Recommendation — highlighted in severity color
+            rec = report.get("recommendation", "")
+            rec_short = rec[:max_chars]
+            cv2.putText(out, rec_short, (6, fh - 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, r_color, 1, cv2.LINE_AA)
+
         return out
 
     # ── Statistics ────────────────────────────────────────────────────────────
@@ -231,6 +324,11 @@ class FireAIPipeline:
                 "total_rejected": total_rejected,
                 "persistence_window": self._persistence_window,
             },
+            "prediction": self._latest_prediction if self._latest_prediction else {
+                "available": self.predictor.available,
+                "growth_label": "warming up" if self.predictor.available else "not trained",
+            },
+            "incident_report": self._latest_report,
         }
 
     @property
