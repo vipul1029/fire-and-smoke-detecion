@@ -44,17 +44,39 @@ logs/
 # Database files
 *.sqlite3
 
-# Model weights and large artifacts
-src/weights/
+# Model weights — download via script or Hugging Face
+src/weights/*.pt
+src/weights/*.onnx
 weights/
 *.pt
 *.onnx
-fire_detection_yolov8m.pt
+*.backup.pt
 
-# Ignore OS-specific and user-specific files
-/.vs/
-# Test input/output files
+# YOLOv8 training output (large — gigabytes of checkpoints and plots)
+runs/
+
+# Datasets — download separately from Kaggle
+"yolo data/"
+yolo data/
+yolo data.zip
+"yolo data.zip"
+archive/
+archive.zip
+
+# Pip cache on E drive
+pip_cache/
+
+# Ollama installer
+OllamaSetup.exe
+
+# Test / sample input-output files
 inputvideo.mp4
 result.mp4
 output.jpg
+output.mp4
 test_image.jpg
+
+# OS-specific
+/.vs/
+Thumbs.db
+.DS_Store
