@@ -228,38 +228,57 @@ class FireAIPipeline:
             cv2.putText(out, pred_text, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, p_color, 1, cv2.LINE_AA)
 
         # Incident report overlay — shown at bottom when active
-        report = self._latest_report
-        if report.get("active"):
-            fh, fw = out.shape[:2]
+        fh, fw = out.shape[:2]
+        report  = self._latest_report
+        has_det = (fire_count + smoke_count) > 0
+
+        if has_det and not report.get("active") and self.reporter._generating:
+            # Thread is running — show placeholder
+            overlay = out.copy()
+            cv2.rectangle(overlay, (0, fh - 30), (fw, fh), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.70, out, 0.30, 0, out)
+            cv2.putText(out, "INCIDENT REPORTER: Analyzing scene...",
+                        (8, fh - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.52,
+                        (180, 180, 180), 1, cv2.LINE_AA)
+
+        elif report.get("active"):
             severity = report.get("severity", "low")
-            r_color = (
-                (0, 0, 255) if severity == "critical" else
-                (0, 100, 255) if severity == "high" else
-                (0, 165, 255) if severity == "medium" else
+            src      = report.get("source", "rule-based")
+            r_color  = (
+                (0, 0, 255)   if severity == "critical" else
+                (0, 100, 255) if severity == "high"     else
+                (0, 165, 255) if severity == "medium"   else
                 (0, 200, 100)
             )
-            # Semi-transparent black bar at bottom
+
+            # Semi-transparent black bar
             overlay = out.copy()
-            cv2.rectangle(overlay, (0, fh - 70), (fw, fh), (0, 0, 0), -1)
-            cv2.addWeighted(overlay, 0.65, out, 0.35, 0, out)
+            cv2.rectangle(overlay, (0, fh - 95), (fw, fh), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.72, out, 0.28, 0, out)
 
-            # Description — truncate to fit width
-            desc = report.get("description", "")
-            max_chars = fw // 7
-            desc_line1 = desc[:max_chars]
-            desc_line2 = desc[max_chars: max_chars * 2] if len(desc) > max_chars else ""
+            # Header bar
+            src_label = "LLM" if src == "llm" else "Rule-Based"
+            header = f"  INCIDENT REPORT [{src_label}]  |  Severity: {severity.upper()}"
+            cv2.rectangle(out, (0, fh - 95), (fw, fh - 75), (40, 10, 10), -1)
+            cv2.putText(out, header, (6, fh - 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (80, 180, 255), 1, cv2.LINE_AA)
 
-            cv2.putText(out, desc_line1, (6, fh - 52),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
-            if desc_line2:
-                cv2.putText(out, desc_line2, (6, fh - 36),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+            # Description
+            desc     = report.get("description", "")
+            max_ch   = max(1, fw // 8)
+            line1    = desc[:max_ch]
+            line2    = desc[max_ch: max_ch * 2] if len(desc) > max_ch else ""
 
-            # Recommendation — highlighted in severity color
+            cv2.putText(out, line1, (6, fh - 57),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (240, 240, 240), 1, cv2.LINE_AA)
+            if line2:
+                cv2.putText(out, line2, (6, fh - 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (240, 240, 240), 1, cv2.LINE_AA)
+
+            # Recommendation
             rec = report.get("recommendation", "")
-            rec_short = rec[:max_chars]
-            cv2.putText(out, rec_short, (6, fh - 16),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, r_color, 1, cv2.LINE_AA)
+            cv2.putText(out, rec[:max_ch], (6, fh - 14),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, r_color, 1, cv2.LINE_AA)
 
         return out
 

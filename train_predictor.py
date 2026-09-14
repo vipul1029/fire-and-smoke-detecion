@@ -175,10 +175,10 @@ def train(args):
 
     videos_dir = Path(args.videos_dir)
     video_files = sorted(
-        list(videos_dir.glob("*.mp4"))
-        + list(videos_dir.glob("*.avi"))
-        + list(videos_dir.glob("*.mov"))
-        + list(videos_dir.glob("*.mkv"))
+        list(videos_dir.rglob("*.mp4"))
+        + list(videos_dir.rglob("*.avi"))
+        + list(videos_dir.rglob("*.mov"))
+        + list(videos_dir.rglob("*.mkv"))
     )
 
     if not video_files:

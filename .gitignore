@@ -76,6 +76,18 @@ output.jpg
 output.mp4
 test_image.jpg
 
+# Video datasets — download from Kaggle, never commit to git
+tt_videos/
+"Temporal Transformer video/"
+Temporal Transformer video/
+firesense/
+unidpro/
+*.avi
+*.mkv
+
+# Large MP4s (dataset videos only — samplevideo.mp4 is explicitly allowed below)
+# Use explicit allow below if needed
+
 # OS-specific
 /.vs/
 Thumbs.db

@@ -53,7 +53,7 @@ def check_gpu():
     # Auto batch size based on VRAM
     if vram_gb >= 8:
         batch = 16
-    elif vram_gb >= 6:
+    elif vram_gb >= 5.5:   # 6 GB cards report ~5.99 GB
         batch = 8
     elif vram_gb >= 4:
         batch = 4
@@ -142,7 +142,7 @@ def train(dataset_dir: str, epochs: int, batch: int):
         patience     = 15,          # early stopping
         amp          = True,        # mixed precision — critical for 6GB VRAM
         cache        = False,       # set to 'ram' if you have 16GB+ RAM
-        workers      = 4,
+        workers      = 2,          # 4 causes spawn issues on Windows
         save         = True,
         plots        = True,
         pretrained   = True,
