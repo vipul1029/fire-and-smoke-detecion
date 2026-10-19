@@ -85,8 +85,18 @@ unidpro/
 *.avi
 *.mkv
 
-# Large MP4s (dataset videos only — samplevideo.mp4 is explicitly allowed below)
-# Use explicit allow below if needed
+# Large MP4s — all video files (datasets, test inputs, false-alarm clips)
+*.mp4
+"falselight video.mp4"
+"falselight2 video.mp4"
+
+# Debug images generated during development/testing
+debug_*.jpg
+false_frame_*.jpg
+
+# Presentation files
+*.pptx
+presentation/
 
 # OS-specific
 /.vs/

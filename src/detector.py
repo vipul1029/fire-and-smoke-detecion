@@ -146,12 +146,12 @@ class FireDetector:
 
         if label == "fire":
             # Fire: red-orange-yellow hues (0-35 and wraparound 160-180)
-            # with high saturation (>100) and high brightness (>100)
+            # Lowered sat/brightness thresholds to handle compressed/dark video
             mask1 = cv2.inRange(hsv,
-                                np.array([0, 100, 100]),
+                                np.array([0, 60, 60]),
                                 np.array([35, 255, 255]))
             mask2 = cv2.inRange(hsv,
-                                np.array([160, 100, 100]),
+                                np.array([160, 60, 60]),
                                 np.array([180, 255, 255]))
             mask = cv2.bitwise_or(mask1, mask2)
         else:
@@ -161,7 +161,7 @@ class FireDetector:
                                np.array([180, 60, 220]))
 
         pixel_ratio = np.count_nonzero(mask) / mask.size
-        threshold = 0.12 if label == "fire" else 0.10
+        threshold = 0.06 if label == "fire" else 0.10
         return pixel_ratio > threshold
 
     # ── Stage 3: Texture Chaos Verification ──────────────────────────────────
@@ -185,9 +185,32 @@ class FireDetector:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
-        # Fire is more chaotic than smoke; smoke can be diffuse
-        threshold = 200.0 if label == "fire" else 80.0
-        return laplacian_var > threshold
+        # Fire: needs some texture (>5) but not the highly structured pattern of LED
+        # grids or signs (~1000-1400). Real fire in compressed MP4: 50-150.
+        # Smoke: raised to 120 to reject uniform white/grey artificial lights.
+        if label == "fire":
+            return 5.0 < laplacian_var < 700.0
+        return laplacian_var > 120.0
+
+    # ── Shape Verification ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _verify_shape(bbox: List[int], label: str) -> bool:
+        """
+        Reject horizontally elongated fire detections (aspect ratio > 2.0).
+        Fire flames rise vertically → bounding boxes are tall or roughly square.
+        Horizontal orange/yellow light strips (neon signs, LEDs, tail lights)
+        produce wide, flat boxes with width/height > 2.4, cleanly separated
+        from real fire (observed ratio 0.8–1.3 in real fire footage).
+        Smoke is not restricted — it can spread in any direction.
+        """
+        if label != "fire":
+            return True
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        if h == 0:
+            return False
+        return (w / h) <= 2.0
 
     # ── Inference ─────────────────────────────────────────────────────────────
 
@@ -224,6 +247,12 @@ class FireDetector:
                 crop = frame[y1:y2, x1:x2].copy()
 
                 if self.enable_verification:
+                    # Shape check: reject wide flat fire boxes (horizontal lights)
+                    if not self._verify_shape([x1, y1, x2, y2], label):
+                        self.color_rejected += 1
+                        logger.debug("Detection rejected by shape check: %s", label)
+                        continue
+
                     # Stage 1: HSV color verification
                     if not self._verify_color(crop, label):
                         self.color_rejected += 1

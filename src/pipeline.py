@@ -124,12 +124,13 @@ class FireAIPipeline:
         # Run YOLO inference (Stage 1 + Stage 3 applied inside detector)
         detections = self.detector.detect(frame)
 
+        # Store pre-persistence bboxes in history so a frame that fails Stage 2
+        # still contributes to future frames' persistence checks, preventing cascade failures.
+        self._frame_history.append([d.bbox for d in detections])
+
         # Stage 2: Temporal persistence filtering
         if self.enable_verification:
             detections = self._filter_by_persistence(detections)
-
-        # Update frame history for next frame's persistence check
-        self._frame_history.append([d.bbox for d in detections])
         if len(self._frame_history) > self._persistence_window:
             self._frame_history.pop(0)
 

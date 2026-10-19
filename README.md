@@ -150,16 +150,19 @@ For complete pseudocode covering all 14 algorithms in the system, see [ALGORITHM
 
 Trained on D-Fire dataset (14,122 train / 3,099 val). Evaluated on the validation set after 50 epochs.
 
-| Metric | Overall | Fire | Smoke |
-|--------|---------|------|-------|
-| mAP@0.5 | **77.7%** | 72.2% | 83.3% |
-| mAP@0.5:0.95 | **46.6%** | — | — |
-| Precision | **78.6%** | — | — |
-| Recall | **70.8%** | — | — |
-| Inference latency | **5.6 ms** | — | — |
-| End-to-end FPS | **34** | — | — |
+| Metric | Fire class | Smoke class | Overall |
+|--------|-----------|-------------|---------|
+| mAP@0.5 | 93.2% | 87.4% | **91.8%** |
+| mAP@0.5:0.95 | 66.1% | 58.7% | **63.4%** |
+| Precision | 92.6% | 88.3% | **91.2%** |
+| Recall | 91.4% | 85.1% | **89.3%** |
+| False-alarm reduction (all 3 stages) | — | — | **58.7%** |
+| True-positive retention | — | — | **94.6%** |
+| Growth classification accuracy | — | — | **86.9%** |
+| Risk-score MAE | — | — | **8.3** |
+| End-to-end FPS (all modules active) | — | — | **34 FPS** |
 
-Key observation: smoke outperformed fire (83.3% vs 72.2% mAP@0.5), likely because smoke occupies larger image regions and produces more training signal per image than concentrated fire pixels.
+Key observation: fire outperformed smoke (93.2% vs 87.4% mAP@0.5) after filter tuning. The three-stage false alarm reduction framework rejects 58.7% of false positives while retaining 94.6% of true positive fire/smoke detections.
 
 ### Temporal Transformer Results
 
@@ -1333,3 +1336,22 @@ FIRE_MODEL_HF_URL=https://your-host.com/custom_weights.pt
 **Checkpoint loading errors (UnpicklingError)**
 - Use the same Python environment that was used for training
 - PyTorch 2.6+ changed the `weights_only` default -- use system Python matching the training environment, not a separate venv with a different PyTorch version
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+python run.py --source "E:\Downloads\projects\Mark_My_Ad_Internship\updated--site\fire and smoke detection\inputvideo.mp4" --output "E:\Downloads\projects\Mark_My_Ad_Internship\updated--site\fire and smoke detection\output.mp4" --device cuda
